@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # Apache Doris Frontend (FE) - 元数据管理和查询协调节点
+  doris-fe:
+    image: apache/doris.fe-ubuntu:3.1.4
+    container_name: doris-fe-3.1.4
+    hostname: doris-fe
+    environment:
+      - FE_SERVERS=fe1:doris-fe:9010
+      - FE_ID=1
+      - PRIORITY_NETWORKS=172.20.0.0/16
+      - ROOT_PASSWORD=doris123
+      - QUERY_PORT=9030
+      - RPC_PORT=9020
+      - HTTP_PORT=8030
+      - EDIT_LOG_PORT=9010
+    ports:
+      - "8030:8030"    # FE Web UI 端口
+      - "9030:9030"    # MySQL 协议端口
+      - "9020:9020"    # RPC 端口
+    volumes:
+      - doris-fe-data:/opt/apache-doris/fe/doris-meta
+      - doris-fe-log:/opt/apache-doris/fe/log
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - doris-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-P", "9030", "-uroot", "-pdoris123", "-e", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Apache Doris Backend (BE) - 数据存储和查询执行节点
+  doris-be:
+    image: apache/doris.be-ubuntu:3.1.4
+    container_name: doris-be-3.1.4
+    hostname: doris-be
+    environment:
+      - FE_SERVERS=fe1:doris-fe:9010
+      - BE_ADDR=doris-be:9050
+      - BE_PORT=9060
+      - BE_HEARTBEAT_PORT=9050
+      - BE_HTTP_PORT=8040
+      - BE_BRPC_PORT=8060
+      - PRIORITY_NETWORKS=172.20.0.0/16
+    depends_on:
+      doris-fe:
+        condition: service_healthy
+    volumes:
+      - doris-be-data:/opt/apache-doris/be/storage
+      - doris-be-log:/opt/apache-doris/be/log
+    ports:
+      - "8040:8040"    # BE HTTP 端口
+      - "9060:9060"    # BE 服务端口
+    networks:
+      - doris-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8040/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  # MySQL 客户端容器，用于初始化和测试
+  mysql-client:
+    image: mysql:8.0
+    container_name: doris-mysql-client
+    command: >
+      sh -c "
+      echo '等待 Doris FE 启动...' &&
+      while ! mysql -h doris-fe -P 9030 -uroot -pdoris123 -e 'SELECT 1' >/dev/null 2>&1; do
+        echo '等待 Doris 连接...' && sleep 5;
+      done &&
+      echo 'Doris 连接成功，开始初始化数据库...' &&
+      sleep 10 &&
+      mysql -h doris-fe -P 9030 -uroot -pdoris123 < /init-scripts/init.sql &&
+      echo '数据库初始化完成！' &&
+      tail -f /dev/null"
+    volumes:
+      - ./init-scripts:/init-scripts
+    depends_on:
+      doris-fe:
+        condition: service_healthy
+    networks:
+      - doris-network
+    restart: on-failure
+
+  # 可选：Web UI 代理（如果不想暴露端口）
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: doris-nginx-proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - doris-fe
+      - doris-be
+    networks:
+      - doris-network
+    restart: unless-stopped
+
+volumes:
+  doris-fe-data:
+    name: doris-fe-data-3.1.4
+  doris-fe-log:
+    name: doris-fe-log-3.1.4
+  doris-be-data:
+    name: doris-be-data-3.1.4
+  doris-be-log:
+    name: doris-be-log-3.1.4
+
+networks:
+  doris-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
