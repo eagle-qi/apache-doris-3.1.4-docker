@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Apache Doris Frontend (FE) - 元数据管理和查询协调节点
   doris-fe:
-    image: apache/doris.fe-ubuntu:3.1.4
+    image: apache/doris:fe-3.1.4
     container_name: doris-fe-3.1.4
     hostname: doris-fe
     environment:
@@ -35,7 +35,7 @@ services:
 
   # Apache Doris Backend (BE) - 数据存储和查询执行节点
   doris-be:
-    image: apache/doris.be-ubuntu:3.1.4
+    image: apache/doris:be-3.1.4
     container_name: doris-be-3.1.4
     hostname: doris-be
     environment:
