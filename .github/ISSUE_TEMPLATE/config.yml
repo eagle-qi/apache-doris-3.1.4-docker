@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 查看文档
+    url: https://github.com/eagle-qi/apache-doris-3.1.4-docker#readme
+    about: 请先查看 README 文档，可能已经包含你需要的答案
+  - name: 💬 讨论区
+    url: https://github.com/eagle-qi/apache-doris-3.1.4-docker/discussions
+    about: 在讨论区分享想法和问题
